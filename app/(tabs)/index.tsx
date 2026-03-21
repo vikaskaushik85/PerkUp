@@ -1,12 +1,83 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import React from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '../../utils/supabase';
+
+interface Card {
+  id: string;
+  name: string;
+  stamps: number;
+  total: number;
+  rewards: number;
+}
+
+const testUserId = 'test-user-123';
 
 export default function HomeScreen() {
-  const cards = [
-    { id: '1', name: 'Curtis Stone', stamps: 7, total: 10, rewards: 2 },
-    { id: '2', name: 'The Daily Grind', stamps: 5, total: 8, rewards: 1 },
-  ];
+  const router = useRouter();
+  const [cards, setCards] = useState<Card[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch loyalty cards whenever screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchCards();
+    }, [])
+  );
+
+  const fetchCards = async () => {
+    try {
+      setIsLoading(true);
+      console.log('📥 Fetching loyalty cards for user:', testUserId);
+
+      // Get user's loyalty cards with cafe info
+      const { data: loyaltyData, error: loyaltyError } = await supabase
+        .from('user_loyalty_cards')
+        .select(`
+          id,
+          stamps,
+          rewards_redeemed,
+          cafe_id,
+          cafes:cafe_id (
+            id,
+            name
+          )
+        `)
+        .eq('user_id', testUserId);
+
+      if (loyaltyError) {
+        console.error('❌ Error fetching loyalty cards:', loyaltyError);
+        setCards([]);
+        return;
+      }
+
+      if (!loyaltyData || loyaltyData.length === 0) {
+        console.log('ℹ️ No loyalty cards found');
+        setCards([]);
+        return;
+      }
+
+      // Transform data to card format
+      const transformedCards = loyaltyData.map((card: any) => ({
+        id: card.id,
+        name: card.cafes?.name || 'Unknown Cafe',
+        stamps: card.stamps || 0,
+        total: 10, // Default to 10 stamps per loyalty card
+        rewards: card.rewards_redeemed || 0,
+      }));
+
+      console.log('✅ Loaded', transformedCards.length, 'loyalty cards');
+      setCards(transformedCards);
+    } catch (error) {
+      console.error('❌ Failed to fetch cards:', error);
+      setCards([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -21,46 +92,65 @@ export default function HomeScreen() {
         <View style={styles.heroCard}>
           <Text style={styles.heroTitle}>Welcome back!</Text>
           <Text style={styles.heroSubtitle}>Collect stamps and get free coffee at your favorite cafes</Text>
-          <TouchableOpacity style={styles.heroButton}>
+          <TouchableOpacity
+            style={styles.heroButton}
+            onPress={() => router.push('/scanner')}
+          >
             <Text style={styles.heroButtonText}>Scan QR Code</Text>
           </TouchableOpacity>
         </View>
 
         <Text style={styles.sectionTitle}>Your Cards</Text>
 
-        {/* Loyalty Cards */}
-        {cards.map((card) => (
-          <View key={card.id} style={styles.loyaltyCard}>
-            <View style={styles.cardHeader}>
-              <View>
-                <Text style={styles.cardName}>{card.name}</Text>
-                <Text style={styles.cardRewards}>{card.rewards} rewards redeemed</Text>
-              </View>
-              <MaterialCommunityIcons name="coffee-outline" size={32} color="white" />
-            </View>
-
-            <View style={styles.progressContainer}>
-              <Text style={styles.progressText}>Progress</Text>
-              <Text style={styles.progressValue}>{card.stamps} / {card.total}</Text>
-            </View>
-            
-            <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { width: `${(card.stamps/card.total)*100}%` }]} />
-            </View>
-
-            <View style={styles.stampGrid}>
-              {[...Array(card.total)].map((_, i) => (
-                <View key={i} style={[styles.stampSlot, i < card.stamps && styles.activeStamp]}>
-                  <MaterialCommunityIcons 
-                    name="coffee" 
-                    size={20} 
-                    color={i < card.stamps ? "#D97706" : "#E5E7EB"} 
-                  />
-                </View>
-              ))}
-            </View>
+        {/* Loading State */}
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#D97706" />
+            <Text style={styles.loadingText}>Loading your cards...</Text>
           </View>
-        ))}
+        ) : cards.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <MaterialCommunityIcons name="coffee-outline" size={48} color="#D97706" />
+            <Text style={styles.emptyText}>No loyalty cards yet</Text>
+            <Text style={styles.emptySubtext}>Scan a cafe's QR code to get started!</Text>
+          </View>
+        ) : (
+          <>
+            {/* Loyalty Cards */}
+            {cards.map((card) => (
+              <View key={card.id} style={styles.loyaltyCard}>
+                <View style={styles.cardHeader}>
+                  <View>
+                    <Text style={styles.cardName}>{card.name}</Text>
+                    <Text style={styles.cardRewards}>{card.rewards} rewards redeemed</Text>
+                  </View>
+                  <MaterialCommunityIcons name="coffee-outline" size={32} color="white" />
+                </View>
+
+                <View style={styles.progressContainer}>
+                  <Text style={styles.progressText}>Progress</Text>
+                  <Text style={styles.progressValue}>{card.stamps} / {card.total}</Text>
+                </View>
+                
+                <View style={styles.progressBarBg}>
+                  <View style={[styles.progressBarFill, { width: `${(card.stamps/card.total)*100}%` }]} />
+                </View>
+
+                <View style={styles.stampGrid}>
+                  {[...Array(card.total)].map((_, i) => (
+                    <View key={i} style={[styles.stampSlot, i < card.stamps && styles.activeStamp]}>
+                      <MaterialCommunityIcons 
+                        name="coffee" 
+                        size={20} 
+                        color={i < card.stamps ? "#D97706" : "#E5E7EB"} 
+                      />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -87,5 +177,10 @@ const styles = StyleSheet.create({
   progressBarFill: { height: 8, backgroundColor: 'black', borderRadius: 4 },
   stampGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 20 },
   stampSlot: { width: 45, height: 45, backgroundColor: 'white', borderRadius: 12, margin: 4, justifyContent: 'center', alignItems: 'center' },
-  activeStamp: { backgroundColor: '#FFFBEB' }
+  activeStamp: { backgroundColor: '#FFFBEB' },
+  loadingContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  loadingText: { marginTop: 12, fontSize: 16, color: '#6B7280' },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  emptyText: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginTop: 12 },
+  emptySubtext: { fontSize: 14, color: '#6B7280', marginTop: 8 },
 });
