@@ -4,6 +4,7 @@ import React, { useRef, useState } from 'react';
 import { Alert, ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '@/utils/supabase';
+import { pendingReward } from '@/utils/rewardState';
 
 export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -147,16 +148,31 @@ export default function ScannerScreen() {
       if (loyaltyCard) {
         console.log('📊 Existing card found, stamps:', loyaltyCard.stamps);
         newStamps = loyaltyCard.stamps + 1;
+
+        // Modulo reset: when newStamps hits an exact multiple of 10 the user
+        // has earned a reward. Reset stamps to 0 in the DB so the next scan
+        // starts a fresh cycle at 1, and increment rewards_redeemed.
+        const isRewardScan = newStamps % 10 === 0;
+        const updatePayload: Record<string, number> = {
+          stamps: isRewardScan ? 0 : newStamps,
+        };
+        if (isRewardScan) {
+          updatePayload.rewards_redeemed = (loyaltyCard.rewards_redeemed || 0) + 1;
+        }
+
         const { error: updateError } = await supabase
           .from('user_loyalty_cards')
-          .update({ stamps: newStamps })
+          .update(updatePayload)
           .eq('id', loyaltyCard.id);
 
         if (updateError) {
           console.error('❌ Card update error:', updateError);
           throw new Error(`Failed to update loyalty card: ${updateError.message}`);
         }
-        console.log('✅ Card updated, new stamps:', newStamps);
+        console.log(
+          '✅ Card updated, new stamps:', isRewardScan ? 0 : newStamps,
+          isRewardScan ? '— reset after reward, rewards_redeemed bumped' : ''
+        );
       } else {
         console.log('🆕 Creating new loyalty card...');
         const { error: createError } = await supabase
@@ -177,6 +193,14 @@ export default function ScannerScreen() {
       // 5. Show in-UI success overlay for 1 second, then auto-navigate home
       console.log('🎉 Scan successful! Stamps:', newStamps);
       const rewardsTrigger = newStamps % 10 === 0;
+
+      // Store reward info so the Home screen can show the congrats popup
+      // immediately upon arrival — no extra DB call needed.
+      if (rewardsTrigger) {
+        pendingReward.active = true;
+        pendingReward.cafeName = cafe.name;
+        pendingReward.stampCount = newStamps;
+      }
 
       setIsLoading(false);
       setSuccessInfo({ stamps: newStamps, cafeName: cafe.name, isReward: rewardsTrigger });
