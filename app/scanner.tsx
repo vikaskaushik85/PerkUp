@@ -148,16 +148,31 @@ export default function ScannerScreen() {
       if (loyaltyCard) {
         console.log('📊 Existing card found, stamps:', loyaltyCard.stamps);
         newStamps = loyaltyCard.stamps + 1;
+
+        // Modulo reset: when newStamps hits an exact multiple of 10 the user
+        // has earned a reward. Reset stamps to 0 in the DB so the next scan
+        // starts a fresh cycle at 1, and increment rewards_redeemed.
+        const isRewardScan = newStamps % 10 === 0;
+        const updatePayload: Record<string, number> = {
+          stamps: isRewardScan ? 0 : newStamps,
+        };
+        if (isRewardScan) {
+          updatePayload.rewards_redeemed = (loyaltyCard.rewards_redeemed || 0) + 1;
+        }
+
         const { error: updateError } = await supabase
           .from('user_loyalty_cards')
-          .update({ stamps: newStamps })
+          .update(updatePayload)
           .eq('id', loyaltyCard.id);
 
         if (updateError) {
           console.error('❌ Card update error:', updateError);
           throw new Error(`Failed to update loyalty card: ${updateError.message}`);
         }
-        console.log('✅ Card updated, new stamps:', newStamps);
+        console.log(
+          '✅ Card updated, new stamps:', isRewardScan ? 0 : newStamps,
+          isRewardScan ? '— reset after reward, rewards_redeemed bumped' : ''
+        );
       } else {
         console.log('🆕 Creating new loyalty card...');
         const { error: createError } = await supabase
