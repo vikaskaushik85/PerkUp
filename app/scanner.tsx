@@ -10,7 +10,17 @@ export default function ScannerScreen() {
   const router = useRouter();
   const cameraRef = useRef<CameraView>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasScanned, setHasScanned] = useState(false);
+  // useRef for the scan guard — updates synchronously, not subject to React's
+  // async state batching. Prevents the native camera from firing a second DB
+  // insert before the first re-render with hasScanned=true arrives.
+  const isProcessingRef = useRef(false);
+
+  const handleGoBack = () => {
+    // router.back() dismisses the scanner modal and returns to the existing
+    // (tabs) screen. router.replace('/(tabs)') would push a duplicate (tabs)
+    // instance onto the stack, requiring multiple back-presses to escape.
+    router.back();
+  };
 
   if (!permission) {
     return <View />;
@@ -37,9 +47,9 @@ export default function ScannerScreen() {
   }
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
-    if (!data || hasScanned) return;
-    
-    setHasScanned(true);
+    if (!data || isProcessingRef.current) return;
+
+    isProcessingRef.current = true; // Synchronous guard — blocks re-entrant calls immediately
     setIsLoading(true);
 
     try {
@@ -61,17 +71,14 @@ export default function ScannerScreen() {
             {
               text: 'Scan Again',
               onPress: () => {
-                setHasScanned(false);
+                isProcessingRef.current = false;
                 setIsLoading(false);
               },
               style: 'default',
             },
             {
               text: 'Go Back',
-              onPress: () => {
-                setIsLoading(false);
-                router.back();
-              },
+              onPress: handleGoBack,
             },
           ]
         );
@@ -87,7 +94,7 @@ export default function ScannerScreen() {
             {
               text: 'Scan Again',
               onPress: () => {
-                setHasScanned(false);
+                isProcessingRef.current = false;
                 setIsLoading(false);
               },
             },
@@ -162,54 +169,63 @@ export default function ScannerScreen() {
         console.log('✅ New card created');
       }
 
-      // 5. Show success
+      // 5. Show success - auto navigate after 2 seconds
       console.log('🎉 Scan successful! Stamps:', newStamps);
       const rewardsTrigger = newStamps % 10 === 0;
+      
+      // Auto-navigate after 3 seconds for success
+      const successTimeout = setTimeout(() => {
+        handleGoBack();
+      }, 3000);
+      
       Alert.alert(
         rewardsTrigger ? '🎉 Reward Earned!' : '✅ Stamp Added',
         rewardsTrigger
-          ? `You've earned a free coffee at ${cafe.name}!\nTotal stamps: ${newStamps}`
-          : `Stamp added at ${cafe.name}\nStamps: ${newStamps}/10`,
+          ? `You've earned a free coffee at ${cafe.name}!\nTotal stamps: ${newStamps}\n\n(Going back in 3 seconds...)`
+          : `Stamp added at ${cafe.name}\nStamps: ${newStamps}/10\n\n(Going back in 3 seconds...)`,
         [
           {
-            text: 'OK',
+            text: 'Go Home Now',
             onPress: () => {
-              setIsLoading(false);
-              router.back();
+              clearTimeout(successTimeout);
+              handleGoBack();
             },
+            style: 'default',
           },
           {
             text: 'Scan Another',
             onPress: () => {
-              setHasScanned(false);
+              clearTimeout(successTimeout);
+              isProcessingRef.current = false;
               setIsLoading(false);
             },
             style: 'cancel',
           },
-        ]
+        ],
+        { cancelable: false }
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       console.error('❌ Scan failed:', errorMessage, error);
       Alert.alert(
-        'Scan Failed',
-        `${errorMessage}\n\nTroubleshooting:\n1. Check internet connection\n2. Verify QR code is valid\n3. Check browser console (F12)`,
+        '❌ Scan Failed',
+        `${errorMessage}\n\nTroubleshooting:\n1. Check internet connection\n2. Verify QR code is valid`,
         [
           {
             text: 'Try Again',
             onPress: () => {
-              setHasScanned(false);
+              isProcessingRef.current = false;
               setIsLoading(false);
             },
+            style: 'default',
           },
           {
             text: 'Go Back',
-            onPress: () => {
-              setIsLoading(false);
-              router.back();
-            },
+            onPress: handleGoBack,
+            style: 'cancel',
           },
-        ]
+        ],
+        { cancelable: false }
       );
     }
   };
@@ -219,7 +235,7 @@ export default function ScannerScreen() {
       <CameraView
         ref={cameraRef}
         style={styles.camera}
-        onBarcodeScanned={isLoading ? undefined : handleBarCodeScanned}
+        onBarcodeScanned={handleBarCodeScanned}
         barcodeScannerSettings={{
           barcodeTypes: ['qr'],
         }}
@@ -252,7 +268,7 @@ export default function ScannerScreen() {
       {/* Close */}
       <TouchableOpacity
         style={styles.closeButton}
-        onPress={() => router.back()}
+        onPress={handleGoBack}
         disabled={isLoading}
       >
         <MaterialCommunityIcons name="close" size={28} color="white" />
