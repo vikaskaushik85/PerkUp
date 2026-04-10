@@ -66,6 +66,33 @@ export default function LoginScreen() {
               </View>
             )}
 
+            {/* Apple Sign-In — shown first per Guideline 4.8 */}
+            {Platform.OS === 'ios' && (
+              <>
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                  cornerRadius={12}
+                  style={styles.appleButton}
+                  onPress={async () => {
+                    setError(null);
+                    setIsSubmitting(true);
+                    try {
+                      const { error: appleError } = await signInWithApple();
+                      if (appleError) setError(appleError);
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                />
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or sign in with email</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+              </>
+            )}
+
             <Text style={styles.label}>Email</Text>
             <TextInput
               style={styles.input}
@@ -103,32 +130,6 @@ export default function LoginScreen() {
                 <Text style={styles.buttonText}>Sign In</Text>
               )}
             </Pressable>
-
-            {Platform.OS === 'ios' && (
-              <>
-                <View style={styles.dividerRow}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>or</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-                <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-                  cornerRadius={12}
-                  style={styles.appleButton}
-                  onPress={async () => {
-                    setError(null);
-                    setIsSubmitting(true);
-                    try {
-                      const { error: appleError } = await signInWithApple();
-                      if (appleError) setError(appleError);
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  }}
-                />
-              </>
-            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

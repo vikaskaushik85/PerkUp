@@ -10,6 +10,7 @@ interface AuthContextType {
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signInWithApple: () => Promise<{ error: string | null }>;
+  deleteAccount: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -19,6 +20,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   signIn: async () => ({ error: null }),
   signInWithApple: async () => ({ error: null }),
+  deleteAccount: async () => ({ error: null }),
   signOut: async () => {},
 });
 
@@ -79,6 +81,17 @@ export function AuthProvider({ children }: Props) {
     }
   };
 
+  const deleteAccount = async () => {
+    try {
+      const { error } = await supabase.rpc('delete_user_account');
+      if (error) return { error: error.message };
+      await supabase.auth.signOut();
+      return { error: null };
+    } catch (e: any) {
+      return { error: e.message ?? 'Failed to delete account' };
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };
@@ -91,6 +104,7 @@ export function AuthProvider({ children }: Props) {
         isLoading,
         signIn,
         signInWithApple,
+        deleteAccount,
         signOut,
       }}
     >

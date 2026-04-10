@@ -1,14 +1,15 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import React from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/use-auth';
 import { useCafe } from '@/hooks/use-cafe';
 import { BRAND } from '@/constants/theme';
 
 export default function SettingsScreen() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, deleteAccount } = useAuth();
   const { cafe } = useCafe();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure?', [
@@ -93,6 +94,56 @@ export default function SettingsScreen() {
           <Text style={styles.signOutText}>Sign Out</Text>
         </Pressable>
 
+        {/* Legal */}
+        <Text style={styles.sectionTitle}>Legal</Text>
+        <Pressable
+          style={styles.legalButton}
+          onPress={() => Linking.openURL('https://perkup.app/privacy')}
+        >
+          <MaterialCommunityIcons name="shield-lock-outline" size={20} color={BRAND.primary} />
+          <Text style={styles.legalButtonText}>Privacy Policy</Text>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={BRAND.textMuted} />
+        </Pressable>
+
+        {/* Delete Account */}
+        <Pressable
+          style={[styles.deleteButton, isDeleting && { opacity: 0.6 }]}
+          onPress={() => {
+            Alert.alert(
+              'Delete Account',
+              'This will permanently delete your account and all associated data. This action cannot be undone.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete Account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setIsDeleting(true);
+                    try {
+                      const { error } = await deleteAccount();
+                      if (error) Alert.alert('Error', error);
+                    } catch {
+                      Alert.alert('Error', 'Failed to delete account. Please try again.');
+                    } finally {
+                      setIsDeleting(false);
+                    }
+                  },
+                },
+              ],
+            );
+          }}
+          disabled={isDeleting}
+        >
+          {isDeleting ? (
+            <ActivityIndicator size="small" color={BRAND.danger} />
+          ) : (
+            <>
+              <MaterialCommunityIcons name="account-remove-outline" size={20} color={BRAND.danger} />
+              <Text style={styles.deleteButtonText}>Delete Account</Text>
+            </>
+          )}
+        </Pressable>
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
@@ -147,4 +198,25 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   signOutText: { color: BRAND.danger, fontSize: 16, fontWeight: '700' },
+  legalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BRAND.card,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 12,
+    gap: 12,
+  },
+  legalButtonText: { flex: 1, fontSize: 16, fontWeight: '600', color: BRAND.text },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderRadius: 12,
+    paddingVertical: 16,
+    marginTop: 8,
+    gap: 8,
+  },
+  deleteButtonText: { color: BRAND.danger, fontSize: 16, fontWeight: '700' },
 });
